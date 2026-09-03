@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <ModDeployDir>LocalMods</ModDeployDir>
+  </PropertyGroup>
+</Project>
