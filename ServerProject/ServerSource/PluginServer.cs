@@ -1,7 +1,7 @@
 ﻿using Barotrauma;
 using Barotrauma.Plugins;
 
-namespace ExampleMod;
+namespace QuickInventory;
 
 public partial class Plugin
 {
