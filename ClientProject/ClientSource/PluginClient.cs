@@ -5,39 +5,41 @@ using Barotrauma.Plugins;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using System.Reflection;
 
 
 namespace QuickInventory;
 
+[HarmonyPatch]
 public partial class Plugin
 {
-    Harmony? harmony;
-    ISettingsService settingsService;
-    ISetting lootKeybind;
+
     public partial void InitProjectSpecific()
     {
-        harmony = new Harmony("drbruhman.quickinventory");
-
-        harmony.PatchAll();
-
-        settingsService.RegisterSetting(lootKeybind);
+   
     }
-    public void Dispose()
+
+
+    private static void doQuickLoot()
     {
-        harmony = null;
+        if (Inventory.SelectedSlot?.Item != null)
+        {
+            DebugConsole.NewMessage(Inventory.SelectedSlot.Item.Name);
+        }
     }
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(CharacterInventory), "Update")]
-    public static void PatchInventoryUpdate(CharacterInventory __instance)
+    public static void PatchInventoryUpdate(float deltaTime, CharacterInventory __instance)
     {
         if (Character.Controlled?.Inventory == null ||
             CharacterHealth.OpenHealthWindow != null ||
-            GameMain.Client.ChatBox.InputBox.Selected) { return; }
+            __instance != Character.Controlled?.Inventory) { return; }
 
-        if (PlayerInput.KeyDown(InputType.ShowInteractionLabels))
+        if (PlayerInput.KeyDown(InputType.ShowInteractionLabels) &&
+            PlayerInput.KeyDown(InputType.Select))
         {
-
+            doQuickLoot();
         }
     }
 }
