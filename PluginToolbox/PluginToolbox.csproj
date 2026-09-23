@@ -7,6 +7,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="HarmonyX" Version="2.15.0" />
+  </ItemGroup>
+
 
   <ItemGroup>
     <ProjectReference Include="..\ClientProject\WindowsClient.csproj">

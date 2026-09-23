@@ -1,4 +1,5 @@
-﻿using Barotrauma;
+﻿
+using Barotrauma;
 using Barotrauma.Plugins;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
@@ -6,7 +7,7 @@ using System.Reflection;
 
 namespace QuickInventory;
 
-public partial class Plugin : IBarotraumaPlugin
+public partial class Plugin : IBarotraumaPlugin, IDisposable
 {
     public static readonly IDebugConsole DebugConsole = PluginServiceProvider.GetService<IDebugConsole>();
     Harmony? harmony;
@@ -28,6 +29,7 @@ public partial class Plugin : IBarotraumaPlugin
         harmony?.UnpatchSelf();
         harmony = null;
     }
+
 
     public void OnContentLoaded()
     {

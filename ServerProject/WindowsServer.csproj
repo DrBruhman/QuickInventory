@@ -3,4 +3,10 @@
     <PlatformName>Windows</PlatformName>
   </PropertyGroup>
   <Import Project="ServerItems.props" />
+  <ItemGroup>
+    <PackageReference Update="Barotrauma.ReferenceAssemblies.Libraries" Version="1.15.19-unstable" />
+    <PackageReference Update="Barotrauma.ReferenceAssemblies.Vanilla" Version="1.15.19-unstable" />
+    <PackageReference Update="HarmonyX" Version="2.15.0" />
+    <PackageReference Update="System.Collections.Immutable" Version="11.0.0-rc.1.26425.128" />
+  </ItemGroup>
 </Project>
