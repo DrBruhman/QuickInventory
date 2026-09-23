@@ -1,28 +1,28 @@
 ﻿using Barotrauma;
 using Barotrauma.Extensions;
 using HarmonyLib;
-using Microsoft.Xna.Framework.Graphics;
-using System.Data.SqlTypes;
 using System.Reflection;
 using static Barotrauma.Inventory;
+using Item = Barotrauma.Item; // vs automaticaly put steamworks in here
 
 namespace QuickInventory;
 
 [HarmonyPatch]
 public partial class Plugin
 {
-    //private ref SlotReference? selectedSlot;
     private static MethodInfo? tryPutItem;
+    private static bool updateInventory = true;
     private static readonly AccessTools.FieldRef<object, SlotReference> selectedSlot =
-        AccessTools.FieldRefAccess<SlotReference>( typeof(Inventory), "selectedSlot");
+        AccessTools.FieldRefAccess<SlotReference>(typeof(Inventory), "selectedSlot");
 
-    public static void ClearSelectedSlot() {
-        Inventory.DraggingItems.Clear();
-        selectedSlot(null) = null; }
+    public static void ClearSelectedSlot()
+    {
+        selectedSlot(null) = null;
+    }
 
     public partial void InitProjectSpecific()
     {
-        
+
     }
 
     private static void DoQuickTransfer()
@@ -51,17 +51,26 @@ public partial class Plugin
                     var slotDone = false;
                     foreach (Inventory inventory in inventories)
                     {
-                        //DebugConsole.NewMessage(inventory.GetType().ToString());
                         if (slotDone) { ClearSelectedSlot(); return; }
                         if (inventory.CanBePut(Inventory.SelectedSlot.Item))
                         {
-                            IEnumerable<Item> slotItems = Inventory.SelectedSlot.ParentInventory.GetItemsAt(Inventory.SelectedSlot.SlotIndex);
-                            foreach (Item item in slotItems)
+                            foreach (Item item in Inventory.SelectedSlot.ParentInventory.GetItemsAt(Inventory.SelectedSlot.SlotIndex).ToArray())
                             {
-                                inventory.TryPutItem(item, Character.Controlled, CharacterInventory.AnySlot);
-                                
-                                if (!slotDone) { break; }
+                                if (Character.Controlled.CanInteractWith(item))
+                                {
+                                    slotDone = inventory.TryPutItem(item, Character.Controlled, CharacterInventory.AnySlot);
+
+                                    if (!slotDone) { break; }
+                                }
                             }
+                        }
+                    }
+                    if (!slotDone && Inventory.SelectedSlot.Item.ParentInventory != Character.Controlled.Inventory &&
+                        Character.Controlled.CanInteractWith(Inventory.SelectedSlot.Item))
+                    {
+                        foreach (int slot in new int[] { 5, 6, 7, 4, 3, 2 })
+                        {
+                            if (Character.Controlled.Inventory.TryPutItem(Inventory.SelectedSlot.Item, slot, false, false, Character.Controlled)) { break; }
                         }
                     }
                     ClearSelectedSlot();
@@ -70,7 +79,8 @@ public partial class Plugin
                 {
                     foreach (Item item in Inventory.SelectedSlot.ParentInventory.GetItemsAt(Inventory.SelectedSlot.SlotIndex).ToArray())
                     {
-                        contextInventory.TryPutItem(item, Character.Controlled, CharacterInventory.AnySlot);
+                        if (Character.Controlled.CanInteractWith(item))
+                        { contextInventory.TryPutItem(item, Character.Controlled, CharacterInventory.AnySlot); }
                     }
                     ClearSelectedSlot();
                 }
@@ -95,7 +105,7 @@ public partial class Plugin
                 {
                     Item possibleStorageItem = Character.Controlled.Inventory.GetItemAt(i);
                     if (possibleStorageItem?.OwnInventory != null && possibleStorageItem.OwnInventory.CanBePut(Inventory.SelectedSlot.Item))
-                    { contextInventory = possibleStorageItem.OwnInventory; return true;}
+                    { contextInventory = possibleStorageItem.OwnInventory; return true; }
                 }
             }
             contextInventory = Character.Controlled.Inventory;
@@ -104,29 +114,102 @@ public partial class Plugin
 
     }
 
-    private static bool preventUpdateSlots = true;
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(CharacterInventory), "Update")]
     public static bool PatchInventoryUpdate(float deltaTime, CharacterInventory __instance)
     {
-        preventUpdateSlots = true;
         if (Character.Controlled?.Inventory == null ||
-            CharacterHealth.OpenHealthWindow != null ||
-            __instance != Character.Controlled?.Inventory) { return true; }
+            __instance != Character.Controlled?.Inventory ||
+            GUI.KeyboardDispatcher.Subscriber != null) { return true; }
 
+        updateInventory = true;
         if (PlayerInput.KeyDown(InputType.ShowInteractionLabels) &&
             PlayerInput.KeyDown(InputType.Select))
         {
             DoQuickTransfer();
         }
-        return true;
+        for (int i = 0; i < 10; i++)
+        {
+            if (PlayerInput.InventoryKeyHit(i))
+            {
+                DoQuickSwap(i + 8);
+            }
+        }
+        if (PlayerInput.KeyDown(InputType.DropItem))
+        {
+            doQuickDrop();
+        }
+        return updateInventory;
+    }
+
+    private static void doQuickDrop()
+    {
+        if (Inventory.SelectedSlot?.Item != null)
+        {
+            var slotItems = Inventory.SelectedSlot.ParentInventory.GetItemsAt(Inventory.SelectedSlot.SlotIndex).ToArray();
+            var amoutToTake = slotItems.Length;
+            if (PlayerInput.KeyDown(InputType.TakeHalfFromInventorySlot)) { amoutToTake = Math.Max(amoutToTake / 2, 1); }
+            else if (PlayerInput.KeyDown(InputType.TakeOneFromInventorySlot)) { amoutToTake = 1; }
+            List<Item> droppedStack = new List<Item>();
+            foreach (Item item in slotItems.Take(amoutToTake))
+            {
+                if (Character.Controlled.CanInteractWith(item))
+                {
+                    droppedStack.Add(item);
+                    item.Drop(Character.Controlled);
+                }
+            }
+            ClearSelectedSlot();
+            slotItems[0].CreateDroppedStack(droppedStack, false);
+        }
+    }
+
+    private static void DoQuickSwap(int slot, bool takeOne = false)
+    {
+        if (Inventory.SelectedSlot == null)
+        {
+            if (PlayerInput.KeyDown(InputType.ShowInteractionLabels) && Character.Controlled.FocusedItem != null && Character.Controlled.FocusedItem.PhysicsBodyActive)
+            {
+                Character.Controlled.Inventory.TryPutItem(Character.Controlled.FocusedItem, slot, true, true, Character.Controlled);
+                updateInventory = false;
+            }
+        }
+        else
+        {
+            var charSlotItems = Character.Controlled.Inventory.GetItemsAt(slot).ToArray();
+            if (charSlotItems.Length > 0)
+            {
+                var amoutToTake = charSlotItems.Length;
+                if (PlayerInput.KeyDown(InputType.TakeHalfFromInventorySlot)) { amoutToTake = Math.Max(amoutToTake / 2, 1); }
+                else if (PlayerInput.KeyDown(InputType.TakeOneFromInventorySlot) || takeOne) { amoutToTake = 1; }
+                foreach (Item item in charSlotItems.Take(amoutToTake))
+                {
+                    if (Character.Controlled.CanInteractWith(item))
+                    { Inventory.SelectedSlot.ParentInventory.TryPutItem(item, Inventory.SelectedSlot.SlotIndex, true, true, Character.Controlled); }
+                }
+                ClearSelectedSlot();
+                updateInventory = false;
+            }
+            else if (Inventory.SelectedSlot.Item != null)
+            {
+                var slotItems = Inventory.SelectedSlot.ParentInventory.GetItemsAt(Inventory.SelectedSlot.SlotIndex).ToArray();
+                var amoutToTake = slotItems.Length;
+                if (PlayerInput.KeyDown(InputType.TakeHalfFromInventorySlot)) { amoutToTake = Math.Max(amoutToTake / 2, 1); }
+                else if (PlayerInput.KeyDown(InputType.TakeOneFromInventorySlot) || takeOne) { amoutToTake = 1; }
+                foreach (Item item in slotItems.Take(amoutToTake))
+                {
+                    if (Character.Controlled.CanInteractWith(item))
+                    { Character.Controlled.Inventory.TryPutItem(item, slot, true, true, Character.Controlled); }
+                }
+                ClearSelectedSlot();
+                updateInventory = false;
+            }
+        }
     }
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(Inventory), "UpdateSlot")]
     public static bool PatchInventoryUpdateSlot(VisualSlot slot, int slotIndex, Item item, bool isSubSlot)
-    {
-        return preventUpdateSlots;
-    }
+    { return !(PlayerInput.KeyDown(InputType.ShowInteractionLabels) && PlayerInput.PrimaryMouseButtonDown()); }
 }
